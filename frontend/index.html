@@ -1,0 +1,243 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Smart Parking Detection</title>
+<style>
+* { margin: 0; padding: 0; box-sizing: border-box; }
+body { font-family: 'Segoe UI', 'Microsoft YaHei', sans-serif; background: #0f172a; color: #e2e8f0; min-height: 100vh; }
+.header { background: #1e293b; padding: 14px 24px; display: flex; align-items: center; justify-content: space-between; border-bottom: 1px solid #334155; }
+.header h1 { font-size: 18px; color: #38bdf8; }
+.status-dot { width: 8px; height: 8px; border-radius: 50%; display: inline-block; margin-right: 6px; }
+.status-dot.on { background: #4ade80; }
+.status-dot.off { background: #f87171; }
+
+.main { display: flex; height: calc(100vh - 50px); }
+.sidebar { width: 340px; flex-shrink: 0; background: #1e293b; border-right: 1px solid #334155; padding: 16px; display: flex; flex-direction: column; gap: 14px; overflow-y: auto; }
+.viewer { flex: 1; display: flex; align-items: center; justify-content: center; padding: 20px; position: relative; overflow: hidden; }
+.viewer img { max-width: 100%; max-height: 100%; object-fit: contain; border-radius: 8px; }
+.viewer .empty-state { text-align: center; color: #475569; }
+.viewer .empty-state .icon { font-size: 56px; }
+.viewer .empty-state p { margin-top: 8px; font-size: 14px; }
+
+.upload-zone { border: 2px dashed #475569; border-radius: 10px; padding: 24px; text-align: center; cursor: pointer; transition: all 0.2s; }
+.upload-zone:hover { border-color: #38bdf8; background: #0f172a; }
+.upload-zone p { font-size: 12px; color: #94a3b8; margin-top: 4px; }
+
+.stats-row { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+.stat { background: #0f172a; border-radius: 8px; padding: 12px; text-align: center; border: 1px solid #1e293b; }
+.stat .val { font-size: 24px; font-weight: 700; }
+.stat .lbl { font-size: 10px; color: #94a3b8; }
+.val.g { color: #4ade80; } .val.r { color: #f87171; } .val.b { color: #38bdf8; }
+
+.result-list { flex: 1; overflow-y: auto; }
+.result-list h3 { font-size: 13px; margin-bottom: 8px; color: #94a3b8; }
+.det-row { display: flex; align-items: center; padding: 6px 10px; font-size: 12px; border-radius: 4px; margin-bottom: 2px; background: #0f172a; }
+.det-row .dot { width: 8px; height: 8px; border-radius: 50%; margin-right: 8px; flex-shrink: 0; }
+.dot.occ { background: #f87171; } .dot.avl { background: #4ade80; }
+.det-row .cid { flex: 1; }
+.det-row .cf { color: #64748b; font-size: 11px; }
+
+.btn { padding: 10px 16px; border: none; border-radius: 8px; cursor: pointer; font-size: 13px; font-weight: 600; transition: all 0.2s; }
+.btn-detect { background: #38bdf8; color: #0f172a; width: 100%; }
+.btn-detect:hover { background: #7dd3fc; }
+.btn-detect:disabled { background: #334155; color: #64748b; cursor: not-allowed; }
+.btn-reset { background: transparent; color: #94a3b8; border: 1px solid #334155; font-size: 11px; padding: 6px 12px; }
+
+.info-tags { font-size: 11px; color: #64748b; }
+.info-tags span { background: #0f172a; padding: 3px 8px; border-radius: 4px; margin-right: 4px; }
+
+.loading-overlay { position: absolute; inset: 0; background: rgba(15,23,42,0.7); display: flex; align-items: center; justify-content: center; z-index: 10; }
+.spinner { width: 40px; height: 40px; border: 4px solid #334155; border-top-color: #38bdf8; border-radius: 50%; animation: spin 0.8s linear infinite; }
+@keyframes spin { to { transform: rotate(360deg); } }
+
+input[type="file"] { display: none; }
+.hidden { display: none !important; }
+</style>
+</head>
+<body>
+
+<div class="header">
+  <h1>Smart Parking Detection</h1>
+  <div style="font-size:12px;">
+    <span id="api-status"><span class="status-dot off"></span>Offline</span>
+    <span id="roi-info" style="margin-left:16px;color:#64748b;"></span>
+  </div>
+</div>
+
+<div class="main">
+  <!-- Sidebar -->
+  <div class="sidebar">
+    <div class="upload-zone" id="drop-zone" onclick="document.getElementById('file-input').click()">
+      <div style="font-size:28px;">📁</div>
+      <p><strong>Click to select image</strong> or drag & drop</p>
+      <p>JPG / PNG / WebP</p>
+    </div>
+    <input type="file" id="file-input" accept="image/*">
+
+    <button class="btn btn-detect" id="btn-detect" disabled onclick="doDetect()">
+      <span id="btn-label">Select an image first</span>
+    </button>
+
+    <div class="stats-row hidden" id="stats-panel">
+      <div class="stat"><div class="val b" id="s-total">0</div><div class="lbl">Total Spaces</div></div>
+      <div class="stat"><div class="val g" id="s-empty">0</div><div class="lbl">Available</div></div>
+      <div class="stat"><div class="val r" id="s-occ">0</div><div class="lbl">Occupied</div></div>
+      <div class="stat"><div class="val b" id="s-time">0</div><div class="lbl">Time (ms)</div></div>
+    </div>
+
+    <div class="info-tags hidden" id="info-tags">
+      <span id="t-model"></span><span id="t-view"></span><span id="t-file"></span>
+    </div>
+
+    <div class="result-list hidden" id="result-list">
+      <h3>Detection Details</h3>
+      <div id="det-items"></div>
+    </div>
+
+    <button class="btn btn-reset hidden" id="btn-reset" onclick="resetAll()">Clear & Start Over</button>
+  </div>
+
+  <!-- Image Viewer -->
+  <div class="viewer" id="viewer">
+    <div class="empty-state" id="empty-state">
+      <div class="icon">🅿️</div>
+      <p><strong>Smart Parking Detection System</strong></p>
+      <p style="font-size:12px;color:#64748b;">Upload a parking lot image to start</p>
+    </div>
+    <img id="result-image" class="hidden" src="" alt="Result">
+    <div class="loading-overlay hidden" id="loading-overlay"><div class="spinner"></div></div>
+  </div>
+</div>
+
+<script>
+const API = 'http://localhost:8000';
+let selectedFile = null;
+
+// ---- Health check ----
+async function ping() {
+  try {
+    const r = await fetch(`${API}/api/health`);
+    const d = await r.json();
+    document.getElementById('api-status').innerHTML = '<span class="status-dot on"></span>Online';
+    document.getElementById('roi-info').textContent = `${d.predefined_roi_count} ROIs loaded`;
+  } catch {
+    document.getElementById('api-status').innerHTML = '<span class="status-dot off"></span>Offline';
+  }
+}
+ping(); setInterval(ping, 15000);
+
+// ---- File handling ----
+const dz = document.getElementById('drop-zone');
+dz.addEventListener('dragover', e => { e.preventDefault(); dz.style.borderColor = '#38bdf8'; });
+dz.addEventListener('dragleave', () => dz.style.borderColor = '' );
+dz.addEventListener('drop', e => {
+  e.preventDefault(); dz.style.borderColor = '';
+  if (e.dataTransfer.files.length) selectFile(e.dataTransfer.files[0]);
+});
+
+// Expose for inline onclick
+window.selectFile = function(file) {
+  if (!file || !file.type.startsWith('image/')) return;
+  selectedFile = file;
+
+  // Preview
+  const reader = new FileReader();
+  reader.onload = ev => {
+    document.getElementById('empty-state').classList.add('hidden');
+    const img = document.getElementById('result-image');
+    img.src = ev.target.result;
+    img.classList.remove('hidden');
+  };
+  reader.readAsDataURL(file);
+
+  document.getElementById('btn-detect').disabled = false;
+  document.getElementById('btn-label').textContent = `Detect: ${file.name}`;
+};
+
+document.getElementById('file-input').addEventListener('change', function() {
+  if (this.files.length) selectFile(this.files[0]);
+});
+
+// ---- Detection ----
+window.doDetect = async function() {
+  if (!selectedFile) return;
+
+  const btn = document.getElementById('btn-detect');
+  const loading = document.getElementById('loading-overlay');
+  btn.disabled = true;
+  document.getElementById('btn-label').textContent = 'Detecting...';
+  loading.classList.remove('hidden');
+
+  const form = new FormData();
+  form.append('image', selectedFile);
+
+  try {
+    const r = await fetch(`${API}/api/detect/image`, { method: 'POST', body: form });
+    const d = await r.json();
+    if (d.error) { alert('Error: ' + d.error); return; }
+
+    // Result image
+    document.getElementById('result-image').src = `data:image/png;base64,${d.image}`;
+    document.getElementById('empty-state').classList.add('hidden');
+    document.getElementById('result-image').classList.remove('hidden');
+
+    // Stats
+    document.getElementById('stats-panel').classList.remove('hidden');
+    document.getElementById('s-total').textContent = d.count;
+    document.getElementById('s-empty').textContent = d.empty;
+    document.getElementById('s-occ').textContent = d.occupied;
+    document.getElementById('s-time').textContent = Math.round(d.inference_time * 1000);
+
+    // Info tags
+    document.getElementById('info-tags').classList.remove('hidden');
+    document.getElementById('t-model').textContent = d.model_used;
+    document.getElementById('t-view').textContent = 'View: ' + d.view_type;
+    document.getElementById('t-file').textContent = selectedFile.name;
+
+    // Detection list (limit display)
+    const maxShow = 100;
+    const dets = d.detections;
+    document.getElementById('result-list').classList.remove('hidden');
+    let html = `<h3>Detection Details (${dets.length} spaces)</h3>`;
+    const show = dets.length > maxShow ? dets.slice(0, maxShow) : dets;
+    show.forEach(dt => {
+      html += `<div class="det-row">
+        <span class="dot ${dt.class === 'available' ? 'avl' : 'occ'}"></span>
+        <span class="cid">#${dt.id} <strong>${dt.class.toUpperCase()}</strong></span>
+        <span class="cf">${dt.confidence > 0 ? (dt.confidence*100).toFixed(1)+'%' : 'default'}</span>
+      </div>`;
+    });
+    if (dets.length > maxShow) html += `<p style="color:#64748b;font-size:11px;margin-top:4px;">... and ${dets.length - maxShow} more</p>`;
+    document.getElementById('det-items').innerHTML = html;
+
+    document.getElementById('btn-reset').classList.remove('hidden');
+  } catch (err) {
+    alert('Detection failed: ' + err.message);
+  } finally {
+    btn.disabled = false;
+    document.getElementById('btn-label').textContent = selectedFile ? `Detect: ${selectedFile.name}` : 'Select an image first';
+    loading.classList.add('hidden');
+  }
+};
+
+// ---- Reset ----
+window.resetAll = function() {
+  selectedFile = null;
+  document.getElementById('result-image').classList.add('hidden');
+  document.getElementById('empty-state').classList.remove('hidden');
+  document.getElementById('stats-panel').classList.add('hidden');
+  document.getElementById('info-tags').classList.add('hidden');
+  document.getElementById('result-list').classList.add('hidden');
+  document.getElementById('btn-reset').classList.add('hidden');
+  document.getElementById('btn-detect').disabled = true;
+  document.getElementById('btn-label').textContent = 'Select an image first';
+};
+
+// Expose selectFile for inline onclick in input
+const fi = document.getElementById('file-input');
+fi.addEventListener('change', function() { if (this.files.length) selectFile(this.files[0]); });
+</script>
+</body>
+</html>

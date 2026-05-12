@@ -1,0 +1,27 @@
+# Dataset (large files - download PKLot separately)
+parking_dataset_real/images/
+parking_dataset_real/labels/
+
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+dist/
+
+# Models - base weights (download from ultralytics)
+*.pt
+!models/*.pt
+
+# IDE
+.vscode/
+.idea/
+
+# OS
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# Temp
+*.tmp
+*.tar.gz
+*.zip

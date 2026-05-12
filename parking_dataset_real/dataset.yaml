@@ -1,0 +1,6 @@
+path: D:\Smart Parking\repo\parking_dataset_real
+train: D:\Smart Parking\repo\parking_dataset_real/images/train
+val: D:\Smart Parking\repo\parking_dataset_real/images/val
+test: D:\Smart Parking\repo\parking_dataset_real/images/test
+nc: 2
+names: ['empty', 'occupied']

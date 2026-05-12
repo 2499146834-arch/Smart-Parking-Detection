@@ -1,0 +1,81 @@
+# Smart Parking Detection System Configuration
+# =============================================
+
+# Model paths (relative to backend/ directory)
+models:
+  general: "best.pt"
+  specialized: "best_cv_project.pt"
+  mask: "parking_mask.png"
+
+# Detection thresholds
+thresholds:
+  # Confidence thresholds
+  cv_confidence: 0.15        # Specialized model (lower: catch more cars)
+  general_confidence: 0.30   # General model
+
+  # View detection
+  view_detection_count: 25   # Min objects to classify as CV Project view
+  view_multi_frame_avg: 23   # Relaxed threshold for multi-frame validation
+
+  # Matching
+  iou: 0.30                  # NMS IoU threshold
+  roi_match_iou: 0.15        # ROI-to-detection matching IoU
+
+  # Multi-frame validation
+  multi_frame_window: 5      # Sliding window size
+  multi_frame_min_votes: 4   # Min frames to confirm CV Project view
+
+# ROI extraction
+roi:
+  min_area: 500              # Minimum connected component area (pixels)
+  connectivity: 4            # OpenCV connectivity mode (4 or 8)
+
+# Video processing
+video:
+  max_frames: 150            # Max frames to process
+  frame_skip: 3              # Detect every N frames
+  cv_project_resolution: [1920, 1080]  # Expected CV Project video resolution
+
+# Post-processing
+post_process:
+  nms_iou: 0.3
+  class_mapping:
+    full: ['full', 'occupied', 'car', 'vehicle', 'illegal']
+    available: ['available', 'empty', 'free']
+
+# Server
+server:
+  host: "0.0.0.0"
+  port: 8000
+  max_upload_mb: 500
+  debug: true
+
+# Evaluation
+evaluation:
+  conf_thresholds: [0.05, 0.10, 0.15, 0.20, 0.25, 0.30, 0.35, 0.40, 0.45, 0.50]
+  iou_threshold: 0.5
+  classes: ['legal', 'available', 'illegal', 'full']
+
+# Training (template)
+training:
+  model: "yolov8n.pt"
+  image_size: 640
+  batch_size: 16
+  epochs: 50
+  optimizer: "SGD"
+  momentum: 0.937
+  lr0: 0.001
+  lrf: 0.000037
+  weight_decay: 0.0005
+  warmup_epochs: 3
+  augment:
+    mosaic: 1.0
+    mixup: 0.1
+    hsv_h: 0.015
+    hsv_s: 0.7
+    hsv_v: 0.4
+    degrees: 10
+    translate: 0.1
+    scale: 0.5
+    flipud: 0.0
+    fliplr: 0.5
