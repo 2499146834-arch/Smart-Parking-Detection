@@ -56,6 +56,8 @@ A view detection module automatically selects the appropriate model using object
 | Specialized | YOLOv8n | 3.0M | 8.2 | **0.9944** | **0.9432** | 0.9972 | 0.9970 |
 | General | YOLO11n | 2.6M | 6.4 | **0.9944** | **0.9251** | 0.9983 | 0.9983 |
 
+> **Original Repository**: [pangjieyao001-boop/Smart-Parking-System-based-on-CV](https://github.com/pangjieyao001-boop/Smart-Parking-System-based-on-CV.git)
+
 ## Experiment Results
 
 | Metric | Original Paper | PKLot Fine-tuned | Improvement |
